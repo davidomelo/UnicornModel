@@ -1,0 +1,152 @@
+//+------------------------------------------------------------------+
+//| Expert initialization function                                   |
+//+------------------------------------------------------------------+
+int OnInit()
+{
+   // Inicialização do Expert Advisor
+   return INIT_SUCCEEDED;
+}
+
+//+------------------------------------------------------------------+
+//| Expert deinitialization function                                 |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+{
+   // Limpeza de objetos e variáveis, se necessário
+}
+
+//+------------------------------------------------------------------+
+//| Expert tick function                                              |
+//+------------------------------------------------------------------+
+void OnTick()
+{
+   // Gerencia a extensão dinâmica das zonas IFVG
+   ManageIFVGs(100); // Verifica as últimas 100 barras
+
+   // Ajusta dinamicamente a sensibilidade com base no volume
+   double fvgSensitivity = AdjustSensitivityDynamically();
+
+   // Implementa a lógica de entrada com base nas zonas de IFVG e OB
+   // Aqui você pode adicionar sua lógica de entrada e saída de ordens
+}
+
+//+------------------------------------------------------------------+
+//| Funções auxiliares                                                |
+//+------------------------------------------------------------------+
+
+// Função para ajustar dinamicamente a sensibilidade com base no volume
+double AdjustSensitivityDynamically()
+{
+   double volume = iVolume(Symbol(), 0, 0);  // Volume da barra atual
+
+   // Ajuste de sensibilidade com base no volume
+   if (volume > 100000)
+      return 2.0;  // Sensibilidade alta
+   else if (volume > 50000)
+      return 1.5;  // Sensibilidade média
+   else
+      return 1.0;  // Sensibilidade padrão
+}
+
+// Função para estender a zona IFVG dinamicamente até ser tocada ou invalidada
+void ExtendIFVGUntilTouched(int index, double &zoneStart, double &zoneEnd, bool isBullish)
+{
+   // Verifica se o índice é válido
+   if (index >= 0 && index < Bars) 
+   {
+      datetime barTime = Time[index];  // Obtém o tempo da barra na posição index
+
+      // Se a zona for de compra (bullish), continua a estender mesmo após ser tocada pela mínima
+      if (isBullish)
+      {
+         if (iLow(Symbol(), 0, index) <= zoneEnd)
+         {
+            // O preço tocou a zona, mas não invalida ainda; mantém a extensão
+            ObjectMove(0, "IFVG_" + IntegerToString(index), 0, barTime, zoneEnd);
+         }
+         else
+         {
+            // Atualiza a extensão da zona IFVG
+            ObjectMove(0, "IFVG_" + IntegerToString(index), 0, barTime, zoneEnd);
+         }
+      }
+      else // Para zonas de venda (bearish)
+      {
+         if (iHigh(Symbol(), 0, index) >= zoneStart)
+         {
+            // O preço tocou a zona, mas não invalida ainda; mantém a extensão
+            ObjectMove(0, "IFVG_" + IntegerToString(index), 0, barTime, zoneStart);
+         }
+         else
+         {
+            // Atualiza a extensão da zona IFVG
+            ObjectMove(0, "IFVG_" + IntegerToString(index), 0, barTime, zoneStart);
+         }
+      }
+   }
+   else
+   {
+      Print("Erro: Índice fora do intervalo de barras disponíveis.");
+   }
+}
+
+// Função para invalidar a IFVG quando a zona é tocada
+void InvalidateIFVG(int index)
+{
+   string objName = "IFVG_" + IntegerToString(index);
+   if (ObjectFind(0, objName) >= 0)
+   {
+      // Remove o objeto do gráfico
+      ObjectDelete(0, objName);  // Corrige a chamada de ObjectDelete
+   }
+}
+
+// Função principal para gerenciar a extensão dinâmica das zonas IFVG
+void ManageIFVGs(int barsToCheck)
+{
+   for (int i = 0; i < barsToCheck; i++)
+   {
+      // Verifica se a zona IFVG deve ser estendida ou invalidada
+      bool isBullishIFVG = IsBullishFVG(i) && IsFVGInverted(i, true);
+      bool isBearishIFVG = IsBearishFVG(i) && IsFVGInverted(i, false);
+      
+      // Extende as zonas IFVG até serem tocadas
+      if (isBullishIFVG)
+      {
+         double zoneStart = iLow(Symbol(), 0, i + 2);
+         double zoneEnd = iHigh(Symbol(), 0, i);
+         ExtendIFVGUntilTouched(i, zoneStart, zoneEnd, true);
+      }
+      else if (isBearishIFVG)
+      {
+         double zoneStart = iHigh(Symbol(), 0, i + 2);
+         double zoneEnd = iLow(Symbol(), 0, i);
+         ExtendIFVGUntilTouched(i, zoneStart, zoneEnd, false);
+      }
+   }
+}
+
+// Funções para verificar se uma FVG foi invertida
+bool IsFVGInverted(int index, bool isBullish)
+{
+   if (isBullish)
+      return (iLow(Symbol(), 0, index) < iLow(Symbol(), 0, index + 2));
+   else
+      return (iHigh(Symbol(), 0, index) > iHigh(Symbol(), 0, index + 2));
+}
+
+// Função para detectar uma FVG bullish
+bool IsBullishFVG(int index)
+{
+   double high2 = iHigh(Symbol(), 0, index + 2); // Máxima da barra 2
+   double low0 = iLow(Symbol(), 0, index);      // Mínima da barra atual
+   return (low0 > high2); // Gap de alta
+}
+
+// Função para detectar uma FVG bearish
+bool IsBearishFVG(int index)
+{
+   double low2 = iLow(Symbol(), 0, index + 2);  // Mínima da barra 2
+   double high0 = iHigh(Symbol(), 0, index);    // Máxima da barra atual
+   return (high0 < low2);  // Gap de baixa
+}
