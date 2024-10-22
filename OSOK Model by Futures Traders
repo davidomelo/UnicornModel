@@ -1,0 +1,101 @@
+//+------------------------------------------------------------------+
+//| Expert initialization function                                   |
+//+------------------------------------------------------------------+
+int OnInit()
+  {
+   // Retorna sucesso na inicialização
+   return(INIT_SUCCEEDED);
+  }
+
+//+------------------------------------------------------------------+
+//| Expert deinit function                                           |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+  {
+   // Função chamada ao desativar o EA
+  }
+
+//+------------------------------------------------------------------+
+//| Expert tick function                                             |
+//+------------------------------------------------------------------+
+void OnTick()
+  {
+   // Chamar função para identificar swings e pintar velas
+   IdentifyAndPaintSwings();
+  }
+
+//+------------------------------------------------------------------+
+//| Função para identificar e pintar swings na TF de 1H              |
+//+------------------------------------------------------------------+
+void IdentifyAndPaintSwings()
+  {
+   // Verificar se há velas suficientes no gráfico para a análise
+   if (Bars < 3)  // O if está correto com os parênteses necessários
+      return;
+
+   // Declarar variáveis para armazenar os valores de high e low
+   double high1, high2, high3;
+   double low1, low2, low3;
+
+   // Iterar pelas velas do gráfico (começando da terceira vela)
+   for (int i = 2; i < Bars; i++)
+     {
+      // Coletar os valores de High e Low das últimas três velas
+      high1 = iHigh(NULL, PERIOD_H1, i+1);   // Coletar o High da vela 1 (anterior)
+      high2 = iHigh(NULL, PERIOD_H1, i);     // Coletar o High da vela 2 (atual)
+      high3 = iHigh(NULL, PERIOD_H1, i-1);   // Coletar o High da vela 3 (seguinte)
+      
+      low1 = iLow(NULL, PERIOD_H1, i+1);     // Coletar o Low da vela 1 (anterior)
+      low2 = iLow(NULL, PERIOD_H1, i);       // Coletar o Low da vela 2 (atual)
+      low3 = iLow(NULL, PERIOD_H1, i-1);     // Coletar o Low da vela 3 (seguinte)
+
+      // Identificação do Swing High
+      if (high2 > high1 && high2 > high3)  // Vela 2 é o Swing High
+        {
+         // Pintar a vela 1 de branco
+         ColorCandle(i+1, clrWhite);
+         // Pintar a vela 2 de vermelho
+         ColorCandle(i, clrRed);
+         // Pintar a vela 3 de azul
+         ColorCandle(i-1, clrBlue);
+        }
+
+      // Identificação do Swing Low
+      if (low2 < low1 && low2 < low3)  // Vela 2 é o Swing Low
+        {
+         // Pintar a vela 1 de branco
+         ColorCandle(i+1, clrWhite);
+         // Pintar a vela 2 de vermelho
+         ColorCandle(i, clrRed);
+         // Pintar a vela 3 de azul
+         ColorCandle(i-1, clrBlue);
+        }
+     }
+  }
+
+//+------------------------------------------------------------------+
+//| Função para colorir as velas                                      |
+//+------------------------------------------------------------------+
+void ColorCandle(int index, color candleColor)
+  {
+   // Verifica se o índice da vela é válido
+   if (index < 0) 
+      return;
+
+   // Criar um identificador único para o objeto que será a vela colorida
+   string obj_name = "candle_color_" + IntegerToString(index);
+
+   // Verifica se o objeto já existe, e se não, cria um novo
+   if (ObjectFind(0, obj_name) == -1) 
+     {
+      ObjectCreate(0, obj_name, OBJ_RECTANGLE, 0, iTime(NULL, PERIOD_H1, index), iHigh(NULL, PERIOD_H1, index), iTime(NULL, PERIOD_H1, index+1), iLow(NULL, PERIOD_H1, index));
+      ObjectSetInteger(0, obj_name, OBJPROP_COLOR, candleColor);
+      ObjectSetInteger(0, obj_name, OBJPROP_STYLE, STYLE_SOLID);
+      ObjectSetInteger(0, obj_name, OBJPROP_WIDTH, 2);
+     }
+   else
+     {
+      // Se o objeto já existir, apenas altera sua cor
+      ObjectSetInteger(0, obj_name, OBJPROP_COLOR, candleColor);
+     }
+  }
