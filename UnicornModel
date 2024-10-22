@@ -1,152 +1,91 @@
 //+------------------------------------------------------------------+
-//| Expert initialization function                                   |
+//|                                                      BreakerBlock |
+//|                        Copyright 2024, MetaQuotes Software Corp. |
+//|                        Desenvolvido por: Seu Nome                |
 //+------------------------------------------------------------------+
-int OnInit()
-{
-   // Inicialização do Expert Advisor
-   return INIT_SUCCEEDED;
+#property strict
+
+// Parâmetros de entrada
+input int Periodos_Pivots = 5;         // Períodos para identificar pivots
+input int LookBackBars = 100;          // Barras para verificar as quebras de estrutura
+input double BreakerBlockRange = 10;   // Distância em pips para identificar a zona de Breaker Block
+
+// Variáveis globais
+double previousHigh, previousLow;
+double breakerBlockHigh, breakerBlockLow;
+bool isBullishBreaker = false, isBearishBreaker = false;
+
+// Função para calcular o pivô mais alto
+double GetHighestHigh(int periodos) {
+    return iHigh(NULL, 0, iHighest(NULL, 0, MODE_HIGH, periodos, 0));
 }
 
-//+------------------------------------------------------------------+
-//| Expert deinitialization function                                 |
-//+------------------------------------------------------------------+
-void OnDeinit(const int reason)
-{
-   // Limpeza de objetos e variáveis, se necessário
+// Função para calcular o pivô mais baixo
+double GetLowestLow(int periodos) {
+    return iLow(NULL, 0, iLowest(NULL, 0, MODE_LOW, periodos, 0));
 }
 
-//+------------------------------------------------------------------+
-//| Expert tick function                                              |
-//+------------------------------------------------------------------+
-void OnTick()
-{
-   // Gerencia a extensão dinâmica das zonas IFVG
-   ManageIFVGs(100); // Verifica as últimas 100 barras
+// Função para identificar uma quebra de estrutura (Break of Structure - BOS)
+bool IsBreakOfStructure(double high, double low) {
+    // Encontra a máxima e mínima mais recentes dentro de um intervalo
+    double highestHigh = GetHighestHigh(LookBackBars);
+    double lowestLow = GetLowestLow(LookBackBars);
 
-   // Ajusta dinamicamente a sensibilidade com base no volume
-   double fvgSensitivity = AdjustSensitivityDynamically();
-
-   // Implementa a lógica de entrada com base nas zonas de IFVG e OB
-   // Aqui você pode adicionar sua lógica de entrada e saída de ordens
+    if (high > highestHigh) {
+        isBullishBreaker = true;
+        isBearishBreaker = false;
+        return true;  // Quebra de alta (Bullish BOS)
+    } 
+    else if (low < lowestLow) {
+        isBearishBreaker = true;
+        isBullishBreaker = false;
+        return true;  // Quebra de baixa (Bearish BOS)
+    }
+    return false;  // Sem quebra de estrutura
 }
 
-//+------------------------------------------------------------------+
-//| Funções auxiliares                                                |
-//+------------------------------------------------------------------+
+// Função para desenhar Breaker Block no gráfico
+void DrawBreakerBlock(double top, double bottom, string name, color blockColor) {
+    // Verifica se o objeto já existe
+    if (ObjectFind(0, name) < 0) {  // Se o objeto não existe, cria um novo
+        datetime time1 = iTime(NULL, 0, 0);  // Tempo da barra atual (barra 0)
+        datetime time2 = iTime(NULL, 0, 1);  // Tempo da barra anterior (barra 1)
 
-// Função para ajustar dinamicamente a sensibilidade com base no volume
-double AdjustSensitivityDynamically()
-{
-   double volume = iVolume(Symbol(), 0, 0);  // Volume da barra atual
-
-   // Ajuste de sensibilidade com base no volume
-   if (volume > 100000)
-      return 2.0;  // Sensibilidade alta
-   else if (volume > 50000)
-      return 1.5;  // Sensibilidade média
-   else
-      return 1.0;  // Sensibilidade padrão
+        ObjectCreate(0, name, OBJ_RECTANGLE, 0, time2, top, time1, bottom);  // Cria o retângulo
+        ObjectSetInteger(0, name, OBJPROP_COLOR, blockColor);  // Define a cor do retângulo
+        ObjectSetInteger(0, name, OBJPROP_WIDTH, 2);  // Define a largura da linha do retângulo
+        ObjectSetInteger(0, name, OBJPROP_STYLE, STYLE_SOLID);  // Define o estilo da linha
+        ObjectSetInteger(0, name, OBJPROP_BACK, true);  // Desenha o objeto em segundo plano
+    }
 }
 
-// Função para estender a zona IFVG dinamicamente até ser tocada ou invalidada
-void ExtendIFVGUntilTouched(int index, double &zoneStart, double &zoneEnd, bool isBullish)
-{
-   // Verifica se o índice é válido
-   if (index >= 0 && index < Bars) 
-   {
-      datetime barTime = Time[index];  // Obtém o tempo da barra na posição index
+// Função principal que é executada em cada tick
+void OnTick() {
+    // Calcula os pivôs mais recentes
+    double currentHigh = GetHighestHigh(Periodos_Pivots);
+    double currentLow = GetLowestLow(Periodos_Pivots);
 
-      // Se a zona for de compra (bullish), continua a estender mesmo após ser tocada pela mínima
-      if (isBullish)
-      {
-         if (iLow(Symbol(), 0, index) <= zoneEnd)
-         {
-            // O preço tocou a zona, mas não invalida ainda; mantém a extensão
-            ObjectMove(0, "IFVG_" + IntegerToString(index), 0, barTime, zoneEnd);
-         }
-         else
-         {
-            // Atualiza a extensão da zona IFVG
-            ObjectMove(0, "IFVG_" + IntegerToString(index), 0, barTime, zoneEnd);
-         }
-      }
-      else // Para zonas de venda (bearish)
-      {
-         if (iHigh(Symbol(), 0, index) >= zoneStart)
-         {
-            // O preço tocou a zona, mas não invalida ainda; mantém a extensão
-            ObjectMove(0, "IFVG_" + IntegerToString(index), 0, barTime, zoneStart);
-         }
-         else
-         {
-            // Atualiza a extensão da zona IFVG
-            ObjectMove(0, "IFVG_" + IntegerToString(index), 0, barTime, zoneStart);
-         }
-      }
-   }
-   else
-   {
-      Print("Erro: Índice fora do intervalo de barras disponíveis.");
-   }
-}
+    // Verifica se houve uma quebra de estrutura
+    if (IsBreakOfStructure(currentHigh, currentLow)) {
+        // Se houve uma quebra de alta (Bullish)
+        if (isBullishBreaker) {
+            breakerBlockHigh = currentLow;  // O Breaker Block bullish é baseado na baixa anterior
+            breakerBlockLow = currentLow - BreakerBlockRange * Point;  // Define a zona do Breaker Block
 
-// Função para invalidar a IFVG quando a zona é tocada
-void InvalidateIFVG(int index)
-{
-   string objName = "IFVG_" + IntegerToString(index);
-   if (ObjectFind(0, objName) >= 0)
-   {
-      // Remove o objeto do gráfico
-      ObjectDelete(0, objName);  // Corrige a chamada de ObjectDelete
-   }
-}
+            // Desenha o Breaker Block no gráfico
+            DrawBreakerBlock(breakerBlockHigh, breakerBlockLow, "BullishBreakerBlock", clrGreen);
+        } 
+        // Se houve uma quebra de baixa (Bearish)
+        else if (isBearishBreaker) {
+            breakerBlockHigh = currentHigh + BreakerBlockRange * Point;  // O Breaker Block bearish é baseado na alta anterior
+            breakerBlockLow = currentHigh;  // Define a zona do Breaker Block
 
-// Função principal para gerenciar a extensão dinâmica das zonas IFVG
-void ManageIFVGs(int barsToCheck)
-{
-   for (int i = 0; i < barsToCheck; i++)
-   {
-      // Verifica se a zona IFVG deve ser estendida ou invalidada
-      bool isBullishIFVG = IsBullishFVG(i) && IsFVGInverted(i, true);
-      bool isBearishIFVG = IsBearishFVG(i) && IsFVGInverted(i, false);
-      
-      // Extende as zonas IFVG até serem tocadas
-      if (isBullishIFVG)
-      {
-         double zoneStart = iLow(Symbol(), 0, i + 2);
-         double zoneEnd = iHigh(Symbol(), 0, i);
-         ExtendIFVGUntilTouched(i, zoneStart, zoneEnd, true);
-      }
-      else if (isBearishIFVG)
-      {
-         double zoneStart = iHigh(Symbol(), 0, i + 2);
-         double zoneEnd = iLow(Symbol(), 0, i);
-         ExtendIFVGUntilTouched(i, zoneStart, zoneEnd, false);
-      }
-   }
-}
+            // Desenha o Breaker Block no gráfico
+            DrawBreakerBlock(breakerBlockHigh, breakerBlockLow, "BearishBreakerBlock", clrRed);
+        }
 
-// Funções para verificar se uma FVG foi invertida
-bool IsFVGInverted(int index, bool isBullish)
-{
-   if (isBullish)
-      return (iLow(Symbol(), 0, index) < iLow(Symbol(), 0, index + 2));
-   else
-      return (iHigh(Symbol(), 0, index) > iHigh(Symbol(), 0, index + 2));
-}
-
-// Função para detectar uma FVG bullish
-bool IsBullishFVG(int index)
-{
-   double high2 = iHigh(Symbol(), 0, index + 2); // Máxima da barra 2
-   double low0 = iLow(Symbol(), 0, index);      // Mínima da barra atual
-   return (low0 > high2); // Gap de alta
-}
-
-// Função para detectar uma FVG bearish
-bool IsBearishFVG(int index)
-{
-   double low2 = iLow(Symbol(), 0, index + 2);  // Mínima da barra 2
-   double high0 = iHigh(Symbol(), 0, index);    // Máxima da barra atual
-   return (high0 < low2);  // Gap de baixa
+        // Atualiza os valores anteriores de alta e baixa
+        previousHigh = currentHigh;
+        previousLow = currentLow;
+    }
 }
