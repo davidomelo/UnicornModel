@@ -1,7 +1,7 @@
 //+------------------------------------------------------------------+
 //|                                                      BreakerBlock |
 //|                        Copyright 2024, MetaQuotes Software Corp. |
-//|                        Desenvolvido por: Peter |
+//|                        Desenvolvido por: Seu Nome                |
 //+------------------------------------------------------------------+
 #property strict
 
@@ -10,24 +10,40 @@ input int Periodos_Pivots = 5;         // Períodos para identificar pivots
 input int LookBackBars = 100;          // Barras para verificar as quebras de estrutura
 input double BreakerBlockRange = 10;   // Distância em pips para identificar a zona de Breaker Block
 
-// Variáveis globais
-double previousHigh, previousLow;
-double breakerBlockHigh, breakerBlockLow;
-bool isBullishBreaker = false, isBearishBreaker = false;
+// Variáveis globais para Breaker Block
+double breakerBlockHigh = 0;
+double breakerBlockLow = 0;
+bool isBullishBreaker = false;
+bool isBearishBreaker = false;
+double pointSize = 0;  // Variável para armazenar o valor do ponto
 
-// Função para calcular o pivô mais alto
+//+------------------------------------------------------------------+
+//| Função para inicializar o tamanho do ponto (Point)                |
+//+------------------------------------------------------------------+
+void OnInit() {
+    pointSize = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+}
+
+//+------------------------------------------------------------------+
+//| Função para calcular o pivô mais alto                            |
+//+------------------------------------------------------------------+
 double GetHighestHigh(int periodos) {
-    return iHigh(NULL, 0, iHighest(NULL, 0, MODE_HIGH, periodos, 0));
+    int index = iHighest(NULL, 0, MODE_HIGH, periodos, 0);
+    return iHigh(NULL, 0, index);
 }
 
-// Função para calcular o pivô mais baixo
+//+------------------------------------------------------------------+
+//| Função para calcular o pivô mais baixo                           |
+//+------------------------------------------------------------------+
 double GetLowestLow(int periodos) {
-    return iLow(NULL, 0, iLowest(NULL, 0, MODE_LOW, periodos, 0));
+    int index = iLowest(NULL, 0, MODE_LOW, periodos, 0);
+    return iLow(NULL, 0, index);
 }
 
-// Função para identificar uma quebra de estrutura (Break of Structure - BOS)
+//+------------------------------------------------------------------+
+//| Função para verificar quebra de estrutura (Break of Structure)    |
+//+------------------------------------------------------------------+
 bool IsBreakOfStructure(double high, double low) {
-    // Encontra a máxima e mínima mais recentes dentro de um intervalo
     double highestHigh = GetHighestHigh(LookBackBars);
     double lowestLow = GetLowestLow(LookBackBars);
 
@@ -44,22 +60,28 @@ bool IsBreakOfStructure(double high, double low) {
     return false;  // Sem quebra de estrutura
 }
 
-// Função para desenhar Breaker Block no gráfico
+//+------------------------------------------------------------------+
+//| Função para desenhar Breaker Block no gráfico                     |
+//+------------------------------------------------------------------+
 void DrawBreakerBlock(double top, double bottom, string name, color blockColor) {
-    // Verifica se o objeto já existe
-    if (ObjectFind(0, name) < 0) {  // Se o objeto não existe, cria um novo
-        datetime time1 = iTime(NULL, 0, 0);  // Tempo da barra atual (barra 0)
-        datetime time2 = iTime(NULL, 0, 1);  // Tempo da barra anterior (barra 1)
+    // Obtém o tempo da barra atual e da anterior
+    datetime time1 = iTime(NULL, 0, 0);  // Tempo da barra atual (barra 0)
+    datetime time2 = iTime(NULL, 0, 1);  // Tempo da barra anterior (barra 1)
 
-        ObjectCreate(0, name, OBJ_RECTANGLE, 0, time2, top, time1, bottom);  // Cria o retângulo
+    // Verifica se o objeto já existe
+    if (ObjectFind(0, name) < 0) {
+        // Cria o retângulo no gráfico
+        ObjectCreate(0, name, OBJ_RECTANGLE, 0, time2, top, time1, bottom);
         ObjectSetInteger(0, name, OBJPROP_COLOR, blockColor);  // Define a cor do retângulo
-        ObjectSetInteger(0, name, OBJPROP_WIDTH, 2);  // Define a largura da linha do retângulo
+        ObjectSetInteger(0, name, OBJPROP_WIDTH, 2);  // Define a largura da linha
         ObjectSetInteger(0, name, OBJPROP_STYLE, STYLE_SOLID);  // Define o estilo da linha
         ObjectSetInteger(0, name, OBJPROP_BACK, true);  // Desenha o objeto em segundo plano
     }
 }
 
-// Função principal que é executada em cada tick
+//+------------------------------------------------------------------+
+//| Função OnTick                                                     |
+//+------------------------------------------------------------------+
 void OnTick() {
     // Calcula os pivôs mais recentes
     double currentHigh = GetHighestHigh(Periodos_Pivots);
@@ -67,25 +89,19 @@ void OnTick() {
 
     // Verifica se houve uma quebra de estrutura
     if (IsBreakOfStructure(currentHigh, currentLow)) {
-        // Se houve uma quebra de alta (Bullish)
         if (isBullishBreaker) {
-            breakerBlockHigh = currentLow;  // O Breaker Block bullish é baseado na baixa anterior
-            breakerBlockLow = currentLow - BreakerBlockRange * Point;  // Define a zona do Breaker Block
+            breakerBlockHigh = currentLow;
+            breakerBlockLow = currentLow - BreakerBlockRange * pointSize;  // Usando pointSize para calcular o Breaker Block
 
             // Desenha o Breaker Block no gráfico
             DrawBreakerBlock(breakerBlockHigh, breakerBlockLow, "BullishBreakerBlock", clrGreen);
         } 
-        // Se houve uma quebra de baixa (Bearish)
         else if (isBearishBreaker) {
-            breakerBlockHigh = currentHigh + BreakerBlockRange * Point;  // O Breaker Block bearish é baseado na alta anterior
-            breakerBlockLow = currentHigh;  // Define a zona do Breaker Block
+            breakerBlockHigh = currentHigh + BreakerBlockRange * pointSize;  // Usando pointSize para calcular o Breaker Block
+            breakerBlockLow = currentHigh;
 
             // Desenha o Breaker Block no gráfico
             DrawBreakerBlock(breakerBlockHigh, breakerBlockLow, "BearishBreakerBlock", clrRed);
         }
-
-        // Atualiza os valores anteriores de alta e baixa
-        previousHigh = currentHigh;
-        previousLow = currentLow;
     }
 }
