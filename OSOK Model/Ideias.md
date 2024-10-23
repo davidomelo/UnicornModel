@@ -29,4 +29,3 @@ Estrutura do EA baseado no TTrades OSOK Model
 ## 8. **Regras de Confirmação de Entrada**:❌
       - As entradas só devem ser feitas após a confirmação do Swing e do CISD em timeframes mais baixos, com preferência por reversões durante as sessões relevantes (como a reversão de Nova York).
    
-   Com esses pontos como base, o próximo passo seria codificar essa lógica em MQL5 (linguagem usada no MetaTrader 5). Posso ajudar a construir esse código passo a passo ou ajustar um código existente, caso você tenha algo que gostaria de modificar.
