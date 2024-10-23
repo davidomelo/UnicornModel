@@ -99,3 +99,4 @@ void ColorCandle(int index, color candleColor)
       ObjectSetInteger(0, obj_name, OBJPROP_COLOR, candleColor);
      }
   }
+
