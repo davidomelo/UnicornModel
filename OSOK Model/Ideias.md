@@ -1,11 +1,11 @@
 Estrutura do EA baseado no TTrades OSOK Model
 
-## 1. Identificação do Swing (Swing High/Low):❗️
+## 1. Identificação do Swing (Swing High/Low):✔️
       - O EA deve identificar swings no gráfico, baseado em três velas consecutivas (Candle 1, Candle 2, Candle 3).
       - Um Swing High ocorre quando a Candle 2 forma uma máxima maior que a Candle 1 e 3.
       - Um Swing Low ocorre quando a Candle 2 forma uma mínima menor que a Candle 1 e 3.
    
-## 2. **Confirmação do Swing (CISD)**:❌
+## 2. **Confirmação do Swing (CISD)**:❗️
       - Após a formação do Swing High ou Low, o EA deve validar uma mudança de estrutura (Change in State of Delivery, CISD) na timeframe inferior (por exemplo, Swing em 1H -> CISD em 5M).
       - Essa confirmação acontece com a quebra de uma série de velas de fechamento opostas.
    
