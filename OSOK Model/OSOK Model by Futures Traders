@@ -29,28 +29,31 @@ void OnTick()
 //+------------------------------------------------------------------+
 void IdentifyAndPaintSwings()
   {
-   // Verificar se há velas suficientes no gráfico para a análise
-   if (Bars < 3)  // O if está correto com os parênteses necessários
-      return;
+   // Substituir 'Bars' por 'Bars(Symbol(),PERIOD_H1)' para garantir o valor correto
+   if (Bars(Symbol(), PERIOD_H1) < 3)  // Checagem direta do número de barras
+   {
+      return;  // Certifique-se que há um ponto e vírgula após o return
+   }
 
    // Declarar variáveis para armazenar os valores de high e low
    double high1, high2, high3;
    double low1, low2, low3;
 
    // Iterar pelas velas do gráfico (começando da terceira vela)
-   for (int i = 2; i < Bars; i++)
+   int totalBars = Bars(Symbol(), PERIOD_H1);  // Obter número total de barras na TF de 1H
+   for (int i = 2; i < totalBars; i++)  // Verifique que os parênteses estão corretos
      {
       // Coletar os valores de High e Low das últimas três velas
-      high1 = iHigh(NULL, PERIOD_H1, i+1);   // Coletar o High da vela 1 (anterior)
-      high2 = iHigh(NULL, PERIOD_H1, i);     // Coletar o High da vela 2 (atual)
-      high3 = iHigh(NULL, PERIOD_H1, i-1);   // Coletar o High da vela 3 (seguinte)
+      high1 = iHigh(NULL, PERIOD_H1, i+1);   // Função corretamente chamada com parênteses
+      high2 = iHigh(NULL, PERIOD_H1, i);     
+      high3 = iHigh(NULL, PERIOD_H1, i-1);
       
       low1 = iLow(NULL, PERIOD_H1, i+1);     // Coletar o Low da vela 1 (anterior)
-      low2 = iLow(NULL, PERIOD_H1, i);       // Coletar o Low da vela 2 (atual)
-      low3 = iLow(NULL, PERIOD_H1, i-1);     // Coletar o Low da vela 3 (seguinte)
+      low2 = iLow(NULL, PERIOD_H1, i);       
+      low3 = iLow(NULL, PERIOD_H1, i-1);     
 
       // Identificação do Swing High
-      if (high2 > high1 && high2 > high3)  // Vela 2 é o Swing High
+      if (high2 > high1 && high2 > high3)  // Verifique que os parênteses estão corretos
         {
          // Pintar a vela 1 de branco
          ColorCandle(i+1, clrWhite);
@@ -61,7 +64,7 @@ void IdentifyAndPaintSwings()
         }
 
       // Identificação do Swing Low
-      if (low2 < low1 && low2 < low3)  // Vela 2 é o Swing Low
+      if (low2 < low1 && low2 < low3)  // Certifique-se que o if está corretamente estruturado
         {
          // Pintar a vela 1 de branco
          ColorCandle(i+1, clrWhite);
@@ -80,7 +83,9 @@ void ColorCandle(int index, color candleColor)
   {
    // Verifica se o índice da vela é válido
    if (index < 0) 
+   {
       return;
+   }
 
    // Criar um identificador único para o objeto que será a vela colorida
    string obj_name = "candle_color_" + IntegerToString(index);
@@ -99,4 +104,3 @@ void ColorCandle(int index, color candleColor)
       ObjectSetInteger(0, obj_name, OBJPROP_COLOR, candleColor);
      }
   }
-
