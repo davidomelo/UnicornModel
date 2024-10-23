@@ -2,7 +2,7 @@ Para criar um Expert Advisor (EA) no MetaTrader 5 baseado no modelo OSOK do TTra
 
 Estrutura do EA baseado no TTrades OSOK Model
 
-1. **Identificação do Swing (Swing High/Low)**:
+1. **Identificação do Swing (Swing High/Low)**: <color>#ff5733Estou neste ponto agora</color>
    - O EA deve identificar swings no gráfico, baseado em três velas consecutivas (Candle 1, Candle 2, Candle 3).
    - Um Swing High ocorre quando a Candle 2 forma uma máxima maior que a Candle 1 e 3.
    - Um Swing Low ocorre quando a Candle 2 forma uma mínima menor que a Candle 1 e 3.
