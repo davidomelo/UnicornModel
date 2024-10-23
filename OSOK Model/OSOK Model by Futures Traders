@@ -28,53 +28,61 @@ void OnTick()
 //| Função para identificar e pintar swings na TF de 1H              |
 //+------------------------------------------------------------------+
 void IdentifyAndPaintSwings()
-  {
-   // Substituir 'Bars' por 'Bars(Symbol(),PERIOD_H1)' para garantir o valor correto
-   if (Bars(Symbol(), PERIOD_H1) < 3)  // Checagem direta do número de barras
+{
+   // Definir uma distância mínima de 100 pips entre os Swings
+   double minDistancePips = 100;
+
+   // Obter o tamanho do ponto (para converter para pips corretamente)
+   double pointSize = SymbolInfoDouble(Symbol(), SYMBOL_POINT);
+
+   // Verificar se há barras suficientes no gráfico
+   if (Bars(Symbol(), PERIOD_H1) < 3)
    {
-      return;  // Certifique-se que há um ponto e vírgula após o return
+      return;
    }
 
    // Declarar variáveis para armazenar os valores de high e low
    double high1, high2, high3;
    double low1, low2, low3;
 
+   // Obter número total de barras na TF de 1H
+   int totalBars = Bars(Symbol(), PERIOD_H1);
+
    // Iterar pelas velas do gráfico (começando da terceira vela)
-   int totalBars = Bars(Symbol(), PERIOD_H1);  // Obter número total de barras na TF de 1H
-   for (int i = 2; i < totalBars; i++)  // Verifique que os parênteses estão corretos
-     {
+   for (int i = 2; i < totalBars; i++)
+   {
       // Coletar os valores de High e Low das últimas três velas
-      high1 = iHigh(NULL, PERIOD_H1, i+1);   // Função corretamente chamada com parênteses
-      high2 = iHigh(NULL, PERIOD_H1, i);     
-      high3 = iHigh(NULL, PERIOD_H1, i-1);
+      high1 = iHigh(NULL, PERIOD_H1, i+1);   // Coletar o High da vela 1 (anterior)
+      high2 = iHigh(NULL, PERIOD_H1, i);     // Coletar o High da vela 2 (atual)
+      high3 = iHigh(NULL, PERIOD_H1, i-1);   // Coletar o High da vela 3 (seguinte)
       
       low1 = iLow(NULL, PERIOD_H1, i+1);     // Coletar o Low da vela 1 (anterior)
-      low2 = iLow(NULL, PERIOD_H1, i);       
-      low3 = iLow(NULL, PERIOD_H1, i-1);     
+      low2 = iLow(NULL, PERIOD_H1, i);       // Coletar o Low da vela 2 (atual)
+      low3 = iLow(NULL, PERIOD_H1, i-1);     // Coletar o Low da vela 3 (seguinte)
 
-      // Identificação do Swing High
-      if (high2 > high1 && high2 > high3)  // Verifique que os parênteses estão corretos
-        {
-         // Pintar a vela 1 de branco
-         ColorCandle(i+1, clrWhite);
-         // Pintar a vela 2 de vermelho
-         ColorCandle(i, clrRed);
-         // Pintar a vela 3 de azul
-         ColorCandle(i-1, clrBlue);
-        }
+      // Calcular a distância entre os swings em pips usando o pointSize correto
+      double distancePipsHigh = MathAbs(high2 - low3) / pointSize;
+      double distancePipsLow = MathAbs(low2 - high3) / pointSize;
 
-      // Identificação do Swing Low
-      if (low2 < low1 && low2 < low3)  // Certifique-se que o if está corretamente estruturado
-        {
-         // Pintar a vela 1 de branco
-         ColorCandle(i+1, clrWhite);
-         // Pintar a vela 2 de vermelho
-         ColorCandle(i, clrRed);
-         // Pintar a vela 3 de azul
-         ColorCandle(i-1, clrBlue);
-        }
-     }
-  }
+      // Identificação do Swing High para Low
+      if (high2 > high1 && high2 > high3 && distancePipsHigh >= minDistancePips)  // Verificar se a distância é maior que 100 pips
+      {
+         // Pintar as três velas de vermelho
+         ColorCandle(i+1, clrRed);  // Vela 1
+         ColorCandle(i, clrRed);    // Vela 2
+         ColorCandle(i-1, clrRed);  // Vela 3
+      }
+
+      // Identificação do Swing Low para High
+      if (low2 < low1 && low2 < low3 && distancePipsLow >= minDistancePips)  // Verificar se a distância é maior que 100 pips
+      {
+         // Pintar as três velas de azul
+         ColorCandle(i+1, clrBlue);  // Vela 1
+         ColorCandle(i, clrBlue);    // Vela 2
+         ColorCandle(i-1, clrBlue);  // Vela 3
+      }
+   }
+}
 
 //+------------------------------------------------------------------+
 //| Função para colorir as velas                                      |
