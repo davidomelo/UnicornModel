@@ -1,114 +1,137 @@
+datetime lastTradeDay;  // Variável global para armazenar o último dia de trading
+
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
 int OnInit()
-  {
-   // Retorna sucesso na inicialização
+{
+   // Inicializar o último dia de trading com a data atual
+   lastTradeDay = iTime(NULL, PERIOD_D1, 0);  // O tempo de início do último candle diário
    return(INIT_SUCCEEDED);
-  }
-
-//+------------------------------------------------------------------+
-//| Expert deinit function                                           |
-//+------------------------------------------------------------------+
-void OnDeinit(const int reason)
-  {
-   // Função chamada ao desativar o EA
-  }
+}
 
 //+------------------------------------------------------------------+
 //| Expert tick function                                             |
 //+------------------------------------------------------------------+
 void OnTick()
-  {
-   // Chamar função para identificar swings e pintar velas
-   IdentifyAndPaintSwings();
-  }
-
-//+------------------------------------------------------------------+
-//| Função para identificar e pintar swings na TF de 1H              |
-//+------------------------------------------------------------------+
-void IdentifyAndPaintSwings()
 {
-   // Definir uma distância mínima de 100 pips entre os Swings
-   double minDistancePips = 100;
-
-   // Obter o tamanho do ponto (para converter para pips corretamente)
-   double pointSize = SymbolInfoDouble(Symbol(), SYMBOL_POINT);
-
-   // Verificar se há barras suficientes no gráfico
-   if (Bars(Symbol(), PERIOD_H1) < 3)
+   // Verificar se é um novo dia de trading
+   datetime currentDay = iTime(NULL, PERIOD_D1, 0);  // O tempo de início do candle diário atual
+   if (currentDay != lastTradeDay)
    {
-      return;
+      // Remover objetos do dia anterior
+      RemoveObjectsFromPreviousDay(lastTradeDay);
+      
+      // Atualizar o dia de trading
+      lastTradeDay = currentDay;
    }
 
-   // Declarar variáveis para armazenar os valores de high e low
-   double high1, high2, high3;
-   double low1, low2, low3;
+   // Identificar e pintar as velas dos swings highs e lows
+   IdentifyAndPaintSwingCandles();
+}
 
-   // Obter número total de barras na TF de 1H
-   int totalBars = Bars(Symbol(), PERIOD_H1);
+//+------------------------------------------------------------------+
+//| Função para identificar swings highs e lows e criar objetos gráficos para o dia atual |
+//+------------------------------------------------------------------+
+void IdentifyAndPaintSwingCandles()
+{
+   int totalBars = Bars(NULL, PERIOD_H1);  // Total de barras no gráfico de 1H
+   double minDistancePips = 100;  // Distância mínima para um swing
 
-   // Iterar pelas velas do gráfico (começando da terceira vela)
-   for (int i = 2; i < totalBars; i++)
+   // Percorrer as últimas velas e detectar swings
+   for (int i = 2; i < totalBars - 2; i++)  // Verificar barras anteriores e seguintes
    {
-      // Coletar os valores de High e Low das últimas três velas
-      high1 = iHigh(NULL, PERIOD_H1, i+1);   // Coletar o High da vela 1 (anterior)
-      high2 = iHigh(NULL, PERIOD_H1, i);     // Coletar o High da vela 2 (atual)
-      high3 = iHigh(NULL, PERIOD_H1, i-1);   // Coletar o High da vela 3 (seguinte)
-      
-      low1 = iLow(NULL, PERIOD_H1, i+1);     // Coletar o Low da vela 1 (anterior)
-      low2 = iLow(NULL, PERIOD_H1, i);       // Coletar o Low da vela 2 (atual)
-      low3 = iLow(NULL, PERIOD_H1, i-1);     // Coletar o Low da vela 3 (seguinte)
+      datetime candleTime = iTime(NULL, PERIOD_H1, i);
+      datetime currentDayStart = iTime(NULL, PERIOD_D1, 0);
 
-      // Calcular a distância entre os swings em pips usando o pointSize correto
-      double distancePipsHigh = MathAbs(high2 - low3) / pointSize;
-      double distancePipsLow = MathAbs(low2 - high3) / pointSize;
+      // Verificar se a vela pertence ao dia de trading atual
+      if (candleTime < currentDayStart)
+         continue;  // Ignorar velas de dias anteriores
 
-      // Identificação do Swing High para Low
-      if (high2 > high1 && high2 > high3 && distancePipsHigh >= minDistancePips)  // Verificar se a distância é maior que 100 pips
+      double high1 = iHigh(NULL, PERIOD_H1, i+1);
+      double high2 = iHigh(NULL, PERIOD_H1, i);
+      double high3 = iHigh(NULL, PERIOD_H1, i-1);
+
+      double low1 = iLow(NULL, PERIOD_H1, i+1);
+      double low2 = iLow(NULL, PERIOD_H1, i);
+      double low3 = iLow(NULL, PERIOD_H1, i-1);
+
+      // Verificar Swing High
+      if (high2 > high1 && high2 > high3 && (high2 - low3) >= minDistancePips * Point())
       {
-         // Pintar as três velas de vermelho
-         ColorCandle(i+1, clrRed);  // Vela 1
-         ColorCandle(i, clrRed);    // Vela 2
-         ColorCandle(i-1, clrRed);  // Vela 3
+         Print("Swing High detectado na vela de índice ", i);
+         PaintSwingCandles(i, clrRed);  // Pintar três velas do swing high
       }
 
-      // Identificação do Swing Low para High
-      if (low2 < low1 && low2 < low3 && distancePipsLow >= minDistancePips)  // Verificar se a distância é maior que 100 pips
+      // Verificar Swing Low
+      if (low2 < low1 && low2 < low3 && (high1 - low2) >= minDistancePips * Point())
       {
-         // Pintar as três velas de azul
-         ColorCandle(i+1, clrBlue);  // Vela 1
-         ColorCandle(i, clrBlue);    // Vela 2
-         ColorCandle(i-1, clrBlue);  // Vela 3
+         Print("Swing Low detectado na vela de índice ", i);
+         PaintSwingCandles(i, clrBlue);  // Pintar três velas do swing low
       }
    }
 }
 
 //+------------------------------------------------------------------+
-//| Função para colorir as velas                                      |
+//| Função para pintar as velas dos swings com retângulos gráficos para o dia atual |
 //+------------------------------------------------------------------+
-void ColorCandle(int index, color candleColor)
-  {
-   // Verifica se o índice da vela é válido
-   if (index < 0) 
+void PaintSwingCandles(int index, color swingColor)
+{
+   string dayString = TimeToString(lastTradeDay, TIME_DATE);
+
+   // Criar objetos gráficos para cobrir as três velas que formam o swing
+   for (int i = 0; i < 3; i++)  // Pintar três velas consecutivas
    {
-      return;
+      int barIndex = index - i;
+      string obj_name = "swing_candle_" + dayString + "_" + IntegerToString(barIndex);
+
+      // Verificar se o objeto já foi criado para essa vela
+      if (ObjectFind(0, obj_name) == -1)
+      {
+         // Coletar dados da vela para desenhar o objeto retangular
+         datetime timeOpen = iTime(NULL, PERIOD_H1, barIndex);      // Tempo de abertura da vela
+         datetime timeClose = timeOpen + 3600;                      // Fechamento ajustado (uma hora)
+         double high1 = iHigh(NULL, PERIOD_H1, barIndex);           // Máxima da vela
+         double low1 = iLow(NULL, PERIOD_H1, barIndex);             // Mínima da vela
+         double open1 = iOpen(NULL, PERIOD_H1, barIndex);           // Preço de abertura
+         double close1 = iClose(NULL, PERIOD_H1, barIndex);         // Preço de fechamento
+
+         // Definir o corpo da vela entre a abertura e o fechamento (retângulo)
+         double topBody = MathMax(open1, close1);  // O maior entre abertura e fechamento
+         double bottomBody = MathMin(open1, close1);  // O menor entre abertura e fechamento
+
+         // Criar o retângulo preenchido para cobrir o corpo da vela
+         bool created = ObjectCreate(0, obj_name + "_body", OBJ_RECTANGLE, 0, timeOpen, topBody, timeClose, bottomBody);
+         if (created)
+         {
+            ObjectSetInteger(0, obj_name + "_body", OBJPROP_COLOR, swingColor);
+            ObjectSetInteger(0, obj_name + "_body", OBJPROP_STYLE, STYLE_SOLID);
+            ObjectSetInteger(0, obj_name + "_body", OBJPROP_WIDTH, 2);  // Tornar a borda mais visível
+            ObjectSetInteger(0, obj_name + "_body", OBJPROP_BACK, false);  // Colocar à frente do gráfico
+            ObjectSetInteger(0, obj_name + "_body", OBJPROP_FILL, true);   // Preencher o retângulo
+            ObjectSetInteger(0, obj_name + "_body", OBJPROP_ZORDER, 1);    // Ordem de exibição mais alta
+         }
+      }
    }
+}
 
-   // Criar um identificador único para o objeto que será a vela colorida
-   string obj_name = "candle_color_" + IntegerToString(index);
+//+------------------------------------------------------------------+
+//| Função para remover objetos antigos do dia anterior              |
+//+------------------------------------------------------------------+
+void RemoveObjectsFromPreviousDay(datetime day)
+{
+   string dayString = TimeToString(day, TIME_DATE);  // Converter a data do dia anterior para string
+   int totalObjects = ObjectsTotal(0);  // Contagem total de objetos no gráfico
 
-   // Verifica se o objeto já existe, e se não, cria um novo
-   if (ObjectFind(0, obj_name) == -1) 
-     {
-      ObjectCreate(0, obj_name, OBJ_RECTANGLE, 0, iTime(NULL, PERIOD_H1, index), iHigh(NULL, PERIOD_H1, index), iTime(NULL, PERIOD_H1, index+1), iLow(NULL, PERIOD_H1, index));
-      ObjectSetInteger(0, obj_name, OBJPROP_COLOR, candleColor);
-      ObjectSetInteger(0, obj_name, OBJPROP_STYLE, STYLE_SOLID);
-      ObjectSetInteger(0, obj_name, OBJPROP_WIDTH, 2);
-     }
-   else
-     {
-      // Se o objeto já existir, apenas altera sua cor
-      ObjectSetInteger(0, obj_name, OBJPROP_COLOR, candleColor);
-     }
-  }
+   // Percorrer todos os objetos e remover aqueles associados ao dia anterior
+   for (int i = totalObjects - 1; i >= 0; i--)
+   {
+      string obj_name = ObjectName(0, i);
+      if (StringFind(obj_name, dayString) != -1)
+      {
+         // Remover o objeto associado ao dia anterior
+         ObjectDelete(0, obj_name);
+         Print("Objeto removido: ", obj_name);
+      }
+   }
+}
