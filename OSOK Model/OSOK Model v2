@@ -1,259 +1,28 @@
-// Variáveis para armazenar o pivô alto e baixo
-double ph = 0, pl = 0;
-int cisTrend = 0;  // 1 para bullish, -1 para bearish
-
-// Parâmetro configurável para Minimum CISD Duration
-input int minCISDDuration = 4;  // Configurar a duração mínima como 4
-
-// Variável para armazenar o tempo da última vela de 5 minutos
-datetime lastM5CandleTime = 0;  
-
-// Variável global para controlar se os desenhos estão habilitados ou desabilitados
-input bool EnableDrawings = false;  // Desativado por padrão
-
-datetime lastTradeDay;  // Variável global para armazenar o último dia de trading
+//+------------------------------------------------------------------+
+//| Input parameters for the EA                                      |
+//+------------------------------------------------------------------+
+input bool UseDaylightSavingTime = true;   // Option to use DST
+input double FixedLotSize = 0.01;          // Fixed lot size for trades (can be adjusted)
+input double RiskPercentage = 0.5;          // Risk percentage per trade (if using percentage risk)
+input double MaxStopLossPips = 50.0;       // Maximum stop loss in pips (to avoid large drawdowns)
+input bool DrawCISDObjects = true;         // Option to draw CISD objects on the chart
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   // Inicializar o último dia de trading com a data atual
-   lastTradeDay = iTime(NULL, PERIOD_D1, 0);  // O tempo de início do último candle diário
-   return(INIT_SUCCEEDED);
+    // Initialization of EA
+    return (INIT_SUCCEEDED);
 }
 
 //+------------------------------------------------------------------+
-//| Função para converter o horário do servidor para o horário de Nova York |
+//| Expert deinitialization function                                 |
 //+------------------------------------------------------------------+
-datetime ConvertToNYTime(datetime serverTime)
+void OnDeinit(const int reason)
 {
-   // Assumindo que o servidor está em UTC e que Nova York está no UTC-5 (ajustável conforme o horário de verão)
-   int nyTimeOffset = -5 * 3600;  // Fuso horário de Nova York (UTC-5)
-   return serverTime + nyTimeOffset;
-}
-
-//+------------------------------------------------------------------+
-//| Função para verificar se o tempo atual está dentro das sessões de Londres ou NY AM |
-//+------------------------------------------------------------------+
-bool IsInTradingSession(datetime timeNY)
-{
-   // Sessão de Londres: 2:00 AM - 5:00 AM NY Local Time
-   int londonStart = 2 * 3600;
-   int londonEnd = 5 * 3600;
-
-   // Sessão de Nova York AM: 7:00 AM - 11:00 AM NY Local Time
-   int nyStart = 7 * 3600;
-   int nyEnd = 11 * 3600;
-
-   // Converter o tempo para estrutura de tempo
-   MqlDateTime dateTime;
-   TimeToStruct(timeNY, dateTime);
-
-   // Obter a hora do dia com base no tempo fornecido
-   int hourOfDay = (dateTime.hour * 3600) + (dateTime.min * 60);  // Hora do dia em segundos
-
-   // Verificar se o tempo atual está dentro de uma das sessões
-   if ((hourOfDay >= londonStart && hourOfDay <= londonEnd) || (hourOfDay >= nyStart && hourOfDay <= nyEnd))
-   {
-      return true;
-   }
-   return false;
-}
-
-//+------------------------------------------------------------------+
-//| Função para identificar swings highs e lows e criar objetos gráficos para o dia atual |
-//+------------------------------------------------------------------+
-void IdentifyAndPaintSwingCandles()
-{
-   int totalBars = Bars(NULL, PERIOD_H1);  // Total de barras no gráfico de 1H
-   double minDistancePips = 100;  // Distância mínima para um swing
-
-   // Percorrer as últimas velas e detectar swings
-   for (int i = 2; i < totalBars - 2; i++)  // Verificar barras anteriores e seguintes
-   {
-      datetime candleTime = iTime(NULL, PERIOD_H1, i);
-      datetime currentDayStart = iTime(NULL, PERIOD_D1, 0);
-
-      // Verificar se a vela pertence ao dia de trading atual
-      if (candleTime < currentDayStart)
-         continue;  // Ignorar velas de dias anteriores
-
-      double high1 = iHigh(NULL, PERIOD_H1, i+1);
-      double high2 = iHigh(NULL, PERIOD_H1, i);  // Segunda vela (no meio do swing)
-      double high3 = iHigh(NULL, PERIOD_H1, i-1);
-
-      double low1 = iLow(NULL, PERIOD_H1, i+1);
-      double low2 = iLow(NULL, PERIOD_H1, i);    // Segunda vela (no meio do swing)
-      double low3 = iLow(NULL, PERIOD_H1, i-1);
-
-      // Verificar Swing High
-      if (high2 > high1 && high2 > high3 && (high2 - low3) >= minDistancePips * Point())
-      {
-         Print("Swing High detectado na vela de índice ", i);
-         PaintSwingCandles(i, clrRed);  // Pintar três velas do swing high
-      }
-
-      // Verificar Swing Low
-      if (low2 < low1 && low2 < low3 && (high1 - low2) >= minDistancePips * Point())
-      {
-         Print("Swing Low detectado na vela de índice ", i);
-         PaintSwingCandles(i, clrBlue);  // Pintar três velas do swing low
-      }
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Função para pintar as velas dos swings com retângulos gráficos para o dia atual |
-//+------------------------------------------------------------------+
-void PaintSwingCandles(int index, color swingColor)
-{
-   // Verificar se os desenhos estão habilitados
-   if (!EnableDrawings) return;  // Se desativado, sair da função
-
-   string dayString = TimeToString(lastTradeDay, TIME_DATE);
-
-   // Criar objetos gráficos para cobrir as três velas que formam o swing
-   for (int i = 0; i < 3; i++)  // Pintar três velas consecutivas
-   {
-      int barIndex = index - i;
-      string obj_name = "swing_candle_" + dayString + "_" + IntegerToString(barIndex);
-
-      // Verificar se o objeto já foi criado para essa vela
-      if (ObjectFind(0, obj_name) == -1)
-      {
-         // Coletar dados da vela para desenhar o objeto retangular
-         datetime timeOpen = iTime(NULL, PERIOD_H1, barIndex);      // Tempo de abertura da vela
-         datetime timeClose = timeOpen + 3600;                      // Fechamento ajustado (uma hora)
-         double high1 = iHigh(NULL, PERIOD_H1, barIndex);           // Máxima da vela
-         double low1 = iLow(NULL, PERIOD_H1, barIndex);             // Mínima da vela
-         double open1 = iOpen(NULL, PERIOD_H1, barIndex);           // Preço de abertura
-         double close1 = iClose(NULL, PERIOD_H1, barIndex);         // Preço de fechamento
-
-         // Definir o corpo da vela entre a abertura e o fechamento (retângulo)
-         double topBody = MathMax(open1, close1);  // O maior entre abertura e fechamento
-         double bottomBody = MathMin(open1, close1);  // O menor entre abertura e fechamento
-
-         // Criar o retângulo preenchido para cobrir o corpo da vela
-         bool created = ObjectCreate(0, obj_name + "_body", OBJ_RECTANGLE, 0, timeOpen, topBody, timeClose, bottomBody);
-         if (created)
-         {
-            ObjectSetInteger(0, obj_name + "_body", OBJPROP_COLOR, swingColor);
-            ObjectSetInteger(0, obj_name + "_body", OBJPROP_STYLE, STYLE_SOLID);
-            ObjectSetInteger(0, obj_name + "_body", OBJPROP_WIDTH, 2);  // Tornar a borda mais visível
-            ObjectSetInteger(0, obj_name + "_body", OBJPROP_BACK, false);  // Colocar à frente do gráfico
-            ObjectSetInteger(0, obj_name + "_body", OBJPROP_FILL, true);   // Preencher o retângulo
-            ObjectSetInteger(0, obj_name + "_body", OBJPROP_ZORDER, 1);    // Ordem de exibição mais alta
-         }
-      }
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Função para detectar CISD na segunda e terceira vela do swing de 1 hora em M5 |
-//+------------------------------------------------------------------+
-void DetectCISDInSecondOrThirdSwingCandle()
-{
-   // Obter o horário atual em NY
-   datetime currentTime = TimeCurrent();
-   datetime currentTimeNY = ConvertToNYTime(currentTime);
-
-   // Verificar se estamos dentro das Kill Zones antes de prosseguir
-   if (!IsInTradingSession(currentTimeNY)) {
-      Print("Fora do horário das Kill Zones, detecção de CISD ignorada.");
-      return;  // Se não estiver nas Kill Zones, não processar
-   }
-
-   int totalBars = Bars(NULL, PERIOD_H1);  // Total de barras no gráfico de 1H
-
-   // Percorrer as velas de 1H para verificar as segundas e terceiras velas do swing
-   for (int i = 2; i < totalBars - 2; i++)  // Verificar barras anteriores e seguintes
-   {
-      double high2 = iHigh(NULL, PERIOD_H1, i);  // Segunda vela (no meio do swing)
-      double low2 = iLow(NULL, PERIOD_H1, i);    // Segunda vela (no meio do swing)
-      double high3 = iHigh(NULL, PERIOD_H1, i-1);  // Terceira vela
-      double low3 = iLow(NULL, PERIOD_H1, i-1);    // Terceira vela
-
-      // Verificar se essas velas fazem parte de um swing high ou low
-      bool isSwingHigh = (high2 > iHigh(NULL, PERIOD_H1, i+1) && high2 > iHigh(NULL, PERIOD_H1, i-1));
-      bool isSwingLow = (low2 < iLow(NULL, PERIOD_H1, i+1) && low2 < iLow(NULL, PERIOD_H1, i-1));
-
-      if (isSwingHigh || isSwingLow)
-      {
-         // Buscar CISD dentro da segunda e terceira vela de swing
-         datetime timeStart2 = iTime(NULL, PERIOD_H1, i);        // Início da segunda vela de 1 hora
-         datetime timeEnd2 = timeStart2 + 3600;                 // Fim da segunda vela de 1 hora
-         datetime timeStart3 = iTime(NULL, PERIOD_H1, i-1);      // Início da terceira vela de 1 hora
-         datetime timeEnd3 = timeStart3 + 3600;                 // Fim da terceira vela de 1 hora
-
-         // Agora buscar velas de 5 minutos dentro dos intervalos da segunda e terceira velas de swing
-         for (int j = 0; j < Bars(NULL, PERIOD_M5); j++)
-         {
-            datetime timeM5 = iTime(NULL, PERIOD_M5, j);
-
-            // Verificar se a vela M5 está dentro da segunda ou terceira vela do swing de 1H
-            if ((timeM5 >= timeStart2 && timeM5 < timeEnd2) || (timeM5 >= timeStart3 && timeM5 < timeEnd3))
-            {
-               datetime timeNY = ConvertToNYTime(timeM5);  // Converter o horário da vela para NY time
-
-               // Verificar se estamos nas sessões de Londres ou NY AM
-               if (IsInTradingSession(timeNY))
-               {
-                  double highM5 = iHigh(NULL, PERIOD_M5, j);
-                  double lowM5 = iLow(NULL, PERIOD_M5, j);
-                  double highM5_prev = iHigh(NULL, PERIOD_M5, j+1);
-                  double lowM5_prev = iLow(NULL, PERIOD_M5, j+1);
-
-                  // Detectar CISD na vela de M5
-                  if ((highM5 > highM5_prev && highM5 > iHigh(NULL, PERIOD_M5, j-1)) || 
-                      (lowM5 < lowM5_prev && lowM5 < iLow(NULL, PERIOD_M5, j-1)))
-                  {
-                     Print("CISD detectado dentro da segunda ou terceira vela de swing em M5 com índice ", j);
-                     // Aqui, podemos armazenar ou usar essa detecção para outras ações no EA
-                  }
-               }
-            }
-         }
-      }
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Função para detectar pivôs e CISD em M5 com base em pivôs        |
-//+------------------------------------------------------------------+
-void DetectCISDInM5UsingPivots(int length, int minSequence, int maxSequence)
-{
-   int totalBars = Bars(NULL, PERIOD_M5);
-
-   // Percorrer as velas de M5
-   for (int i = 2; i < totalBars - 2; i++) 
-   {
-      double high1 = iHigh(NULL, PERIOD_M5, i+1);
-      double high2 = iHigh(NULL, PERIOD_M5, i);
-      double high3 = iHigh(NULL, PERIOD_M5, i-1);
-
-      double low1 = iLow(NULL, PERIOD_M5, i+1);
-      double low2 = iLow(NULL, PERIOD_M5, i);
-      double low3 = iLow(NULL, PERIOD_M5, i-1);
-
-      // Detectar pivôs altos e baixos
-      if (high2 > high1 && high2 > high3) ph = high2;
-      if (low2 < low1 && low2 < low3) pl = low2;
-
-      // Verificar Bearish CISD (transição de alta para baixa)
-      if (cisTrend == 1 && iClose(NULL, PERIOD_M5, i) < pl && i - cisTrend <= maxSequence && i - cisTrend >= minCISDDuration)
-      {
-         cisTrend = -1;  // Definir como tendência de baixa
-         Print("Bearish CISD detectado em M5 na vela ", i);
-      }
-
-      // Verificar Bullish CISD (transição de baixa para alta)
-      if (cisTrend == -1 && iClose(NULL, PERIOD_M5, i) > ph && i - cisTrend <= maxSequence && i - cisTrend >= minCISDDuration)
-      {
-         cisTrend = 1;  // Definir como tendência de alta
-         Print("Bullish CISD detectado em M5 na vela ", i);
-      }
-   }
+    // Optionally, remove all CISD objects here if desired
+    // For example, you can loop through objects and delete them
 }
 
 //+------------------------------------------------------------------+
@@ -261,34 +30,294 @@ void DetectCISDInM5UsingPivots(int length, int minSequence, int maxSequence)
 //+------------------------------------------------------------------+
 void OnTick()
 {
-   // Parâmetros para CISD
-   int length = 10;  // Tamanho do swing
-   int maxSequence = 100;  // Duração máxima
-
-   // Detectar CISD com base nos pivôs, usando minCISDDuration definido pelo usuário
-   DetectCISDInM5UsingPivots(length, minCISDDuration, maxSequence);
-
-   // Detectar CISD na segunda e terceira vela de swing
-   DetectCISDInSecondOrThirdSwingCandle();
+    // Check if it's within the allowed session (Londres or NY AM)
+    if (IsAllowedSession())
+    {
+        // Check if there is already an open trade
+        if (PositionsTotal() == 0)
+        {
+            // Identify swing high or swing low on 5-minute timeframe
+            bool isSwingHigh = false, isSwingLow = false;
+            if (TimeFrameSwings(PERIOD_M5, isSwingHigh, isSwingLow))
+            {
+                // Confirm CISD in 5-minute timeframe
+                bool isBullishCISD = false, isBearishCISD = false;
+                if (TimeFrameCISD(PERIOD_M5, isBullishCISD, isBearishCISD))
+                {
+                    // Only proceed if conditions for Buy or Sell are met
+                    if (isSwingLow && isBullishCISD)
+                    {
+                        ExecuteTrade(ORDER_TYPE_BUY);
+                    }
+                    else if (isSwingHigh && isBearishCISD)
+                    {
+                        ExecuteTrade(ORDER_TYPE_SELL);
+                    }
+                }
+            }
+        }
+        else
+        {
+            Print("There is already an open position. Waiting for it to close.");
+        }
+    }
+    else
+    {
+        Print("Outside allowed trading session.");
+    }
 }
 
 //+------------------------------------------------------------------+
-//| Função para remover objetos antigos do dia anterior              |
+//| Function to check allowed sessions                               |
+//| Only allows trading during the London Open and NY AM sessions     |
 //+------------------------------------------------------------------+
-void RemoveObjectsFromPreviousDay(datetime day)
+bool IsAllowedSession()
 {
-   string dayString = TimeToString(day, TIME_DATE);  // Converter a data do dia anterior para string
-   int totalObjects = ObjectsTotal(0);  // Contagem total de objetos no gráfico
+    // Get the current server time and convert to MqlDateTime structure
+    datetime currentTime = TimeCurrent();
+    MqlDateTime timeStruct;
+    TimeToStruct(currentTime, timeStruct);
 
-   // Percorrer todos os objetos e remover aqueles associados ao dia anterior
-   for (int i = totalObjects - 1; i >= 0; i--)
-   {
-      string obj_name = ObjectName(0, i);
-      if (StringFind(obj_name, dayString) != -1)
-      {
-         // Remover o objeto associado ao dia anterior
-         ObjectDelete(0, obj_name);
-         Print("Objeto removido: ", obj_name);
-      }
-   }
+    // Adjust hour based on the difference from NY time
+    int hour = timeStruct.hour;
+
+    // Consider the time difference: Lisbon (UTC+0/1) vs. NY (UTC-5/4)
+    int timeDifference = UseDaylightSavingTime ? 6 : 5; // 6 hours during DST, 5 hours otherwise
+    hour -= timeDifference;
+
+    // Wrap around hour if negative
+    if (hour < 0)
+        hour += 24;
+
+    int minute = timeStruct.min;
+
+    // Checking if the hour is within the London Open session (2:00 AM to 5:00 AM NYT)
+    if ((hour == 2 && minute >= 0) || (hour == 3) || (hour == 4) || (hour == 5 && minute == 0))
+    {
+        return true; // Within London Open session
+    }
+
+    // Checking if the hour is within the NY AM session (8:30 AM to 11:00 AM NYT)
+    if ((hour == 8 && minute >= 30) || (hour == 9) || (hour == 10))
+    {
+        return true; // Within NY AM session
+    }
+
+    return false;
 }
+
+//+------------------------------------------------------------------+
+//| Function to check for swings in 5-minute timeframe               |
+//+------------------------------------------------------------------+
+bool TimeFrameSwings(ENUM_TIMEFRAMES timeFrame, bool &isSwingHigh, bool &isSwingLow)
+{
+    // Access highs and lows of the last three candles
+    double high1 = iHigh(NULL, timeFrame, 1);
+    double high2 = iHigh(NULL, timeFrame, 2);
+    double high3 = iHigh(NULL, timeFrame, 3);
+
+    double low1 = iLow(NULL, timeFrame, 1);
+    double low2 = iLow(NULL, timeFrame, 2);
+    double low3 = iLow(NULL, timeFrame, 3);
+
+    // Check for a swing high (previous high is higher than neighboring highs)
+    if (high2 > high1 && high2 > high3)
+    {
+        isSwingHigh = true;
+        Print("Swing High detected on 5-minute timeframe.");
+    }
+
+    // Check for a swing low (previous low is lower than neighboring lows)
+    if (low2 < low1 && low2 < low3)
+    {
+        isSwingLow = true;
+        Print("Swing Low detected on 5-minute timeframe.");
+    }
+
+    return (isSwingHigh || isSwingLow);
+}
+
+//+------------------------------------------------------------------+
+//| Function to check for CISD in 5-minute timeframe based on CISD.txt|
+//+------------------------------------------------------------------+
+bool TimeFrameCISD(ENUM_TIMEFRAMES timeFrame, bool &isBullishCISD, bool &isBearishCISD)
+{
+    // Implementing CISD logic based on CISD.txt rules
+    if (IsBullishCISD(timeFrame))
+    {
+        isBullishCISD = true;
+        Print("Bullish CISD detected.");
+        if (DrawCISDObjects)
+            DrawCISD(timeFrame, true); // Draw bullish CISD
+    }
+    else if (IsBearishCISD(timeFrame))
+    {
+        isBearishCISD = true;
+        Print("Bearish CISD detected.");
+        if (DrawCISDObjects)
+            DrawCISD(timeFrame, false); // Draw bearish CISD
+    }
+
+    return (isBullishCISD || isBearishCISD);
+}
+
+//+------------------------------------------------------------------+
+//| Function to detect bullish CISD based on CISD.txt                |
+//+------------------------------------------------------------------+
+bool IsBullishCISD(ENUM_TIMEFRAMES timeFrame)
+{
+    // Example logic for bullish CISD detection based on conditions in CISD.txt
+    if (iClose(NULL, timeFrame, 1) > iOpen(NULL, timeFrame, 1) && iClose(NULL, timeFrame, 1) > iHigh(NULL, timeFrame, 2))
+    {
+        return true; // Bullish CISD condition met
+    }
+    return false;
+}
+
+//+------------------------------------------------------------------+
+//| Function to detect bearish CISD based on CISD.txt                |
+//+------------------------------------------------------------------+
+bool IsBearishCISD(ENUM_TIMEFRAMES timeFrame)
+{
+    // Example logic for bearish CISD detection based on conditions in CISD.txt
+    if (iClose(NULL, timeFrame, 1) < iOpen(NULL, timeFrame, 1) && iClose(NULL, timeFrame, 1) < iLow(NULL, timeFrame, 2))
+    {
+        return true; // Bearish CISD condition met
+    }
+    return false;
+}
+
+//+------------------------------------------------------------------+
+//| Function to execute trade                                        |
+//+------------------------------------------------------------------+
+void ExecuteTrade(int orderType)
+{
+    // Get the current Ask and Bid prices
+    double askPrice = SymbolInfoDouble(Symbol(), SYMBOL_ASK);
+    double bidPrice = SymbolInfoDouble(Symbol(), SYMBOL_BID);
+    double pointValue = SymbolInfoDouble(Symbol(), SYMBOL_POINT);
+
+    // Determine Stop Loss level based on swing type
+    double stopLossPrice = 0;
+    double stopLossPips = 0;
+
+    if (orderType == ORDER_TYPE_BUY)
+    {
+        stopLossPrice = iLow(NULL, PERIOD_M5, 2); // SL at the low of the previous swing
+        stopLossPips = MathAbs(askPrice - stopLossPrice) / pointValue;
+    }
+    else if (orderType == ORDER_TYPE_SELL)
+    {
+        stopLossPrice = iHigh(NULL, PERIOD_M5, 2); // SL at the high of the previous swing
+        stopLossPips = MathAbs(bidPrice - stopLossPrice) / pointValue;
+    }
+
+    // Ensure stop loss is within the maximum allowed to avoid large drawdowns
+    if (stopLossPips > MaxStopLossPips)
+    {
+        Print("Adjusted stop loss to the maximum allowed pips to avoid large drawdowns.");
+        stopLossPips = MaxStopLossPips;
+        stopLossPrice = (orderType == ORDER_TYPE_BUY) ? askPrice - stopLossPips * pointValue : bidPrice + stopLossPips * pointValue;
+    }
+
+    // Ensure stop loss pips is not zero before calculating lot size
+    if (stopLossPips <= 0)
+    {
+        Print("Error: Stop Loss in pips is zero or negative. Cannot proceed with trade.");
+        return; // Exit the function to avoid division by zero
+    }
+
+    // Calculate Take Profit (minimum 1:2 RR)
+    double takeProfitPrice = (orderType == ORDER_TYPE_BUY) ? askPrice + (2 * stopLossPips * pointValue) : bidPrice - (2 * stopLossPips * pointValue);
+
+    // Set up request structure for order execution in MetaTrader 5
+    MqlTradeRequest request;
+    MqlTradeResult result;
+    ZeroMemory(request);
+    ZeroMemory(result);
+
+    request.action = TRADE_ACTION_DEAL;
+    request.symbol = Symbol();
+
+    // Determine lot size based on chosen risk method
+    double lotSize = CalculateLotSize(stopLossPips);
+    request.volume = lotSize; // Set calculated lot size
+    request.type = orderType;
+    request.price = (orderType == ORDER_TYPE_BUY) ? askPrice : bidPrice;
+    request.sl = stopLossPrice;
+    request.tp = takeProfitPrice;
+    request.deviation = 2;
+    request.magic = 123456;
+    request.comment = (orderType == ORDER_TYPE_BUY) ? "Buy Trade based on CISD" : "Sell Trade based on CISD";
+
+    // Send the trade order
+    if (!OrderSend(request, result))
+    {
+        Print("Error opening order: ", result.retcode);
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Function to calculate lot size based on risk                     |
+//+------------------------------------------------------------------+
+double CalculateLotSize(double stopLossPips)
+{
+    double lotSize;
+    if (RiskPercentage > 0)  // If using percentage risk
+    {
+        double accountBalance = AccountInfoDouble(ACCOUNT_BALANCE);
+        double riskAmount = accountBalance * (RiskPercentage / 100.0);
+        double pointValue = SymbolInfoDouble(Symbol(), SYMBOL_TRADE_TICK_VALUE);
+        lotSize = riskAmount / (stopLossPips * pointValue);
+    }
+    else  // If using fixed lot size
+    {
+        lotSize = FixedLotSize;
+    }
+    return NormalizeDouble(lotSize, 2); // Normaliza para duas casas decimais
+}
+
+//+------------------------------------------------------------------+
+//| Function to draw CISD on the chart                               |
+//+------------------------------------------------------------------+
+void DrawCISD(ENUM_TIMEFRAMES timeFrame, bool isBullish)
+{
+    // Get the price at which the CISD was confirmed (using the close of the candle)
+    double price = iClose(NULL, timeFrame, 1); // Close price of the candle that confirmed CISD
+    string objectName = isBullish ? "BullishCISD_" + TimeToString(TimeCurrent(), TIME_DATE | TIME_MINUTES) : "BearishCISD_" + TimeToString(TimeCurrent(), TIME_DATE | TIME_MINUTES);
+    
+    // Set color and style based on the CISD type
+    color lineColor = isBullish ? clrGreen : clrRed;
+
+    // Length of the line in price units (adjust as necessary)
+    double shortLineLength = 50 * SymbolInfoDouble(Symbol(), SYMBOL_POINT); 
+
+    // Create a horizontal line to represent CISD
+    if (!ObjectCreate(0, objectName, OBJ_TREND, 0, TimeCurrent(), price, TimeCurrent(), price))
+    {
+        Print("Failed to create object: ", GetLastError());
+    }
+
+    // Set properties for the line
+    ObjectSetInteger(0, objectName, OBJPROP_COLOR, lineColor);
+    ObjectSetInteger(0, objectName, OBJPROP_WIDTH, 2);
+    ObjectSetInteger(0, objectName, OBJPROP_STYLE, STYLE_SOLID);
+
+    // Create two separate lines to form a short horizontal line
+    string leftObjectName = objectName + "_Left";
+    string rightObjectName = objectName + "_Right";
+
+    // Left line
+    ObjectCreate(0, leftObjectName, OBJ_TREND, 0, TimeCurrent() - PeriodSeconds(), price, TimeCurrent() - PeriodSeconds(), price - shortLineLength);
+    ObjectSetInteger(0, leftObjectName, OBJPROP_COLOR, lineColor);
+    ObjectSetInteger(0, leftObjectName, OBJPROP_WIDTH, 2);
+    ObjectSetInteger(0, leftObjectName, OBJPROP_STYLE, STYLE_SOLID);
+
+    // Right line
+    ObjectCreate(0, rightObjectName, OBJ_TREND, 0, TimeCurrent(), price, TimeCurrent(), price + shortLineLength);
+    ObjectSetInteger(0, rightObjectName, OBJPROP_COLOR, lineColor);
+    ObjectSetInteger(0, rightObjectName, OBJPROP_WIDTH, 2);
+    ObjectSetInteger(0, rightObjectName, OBJPROP_STYLE, STYLE_SOLID);
+}
+
+//+------------------------------------------------------------------+
