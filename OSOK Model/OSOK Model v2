@@ -1,3 +1,10 @@
+// Variáveis para armazenar o pivô alto e baixo
+double ph = 0, pl = 0;
+int cisTrend = 0;  // 1 para bullish, -1 para bearish
+
+// Parâmetro configurável para Minimum CISD Duration
+input int minCISDDuration = 4;  // Configurar a duração mínima como 4
+
 // Variável para armazenar o tempo da última vela de 5 minutos
 datetime lastM5CandleTime = 0;  
 
@@ -143,9 +150,9 @@ void PaintSwingCandles(int index, color swingColor)
 }
 
 //+------------------------------------------------------------------+
-//| Função para detectar CISD na segunda vela do swing de 1 hora em M5 |
+//| Função para detectar CISD na segunda e terceira vela do swing de 1 hora em M5 |
 //+------------------------------------------------------------------+
-void DetectCISDInSecondSwingCandle()
+void DetectCISDInSecondOrThirdSwingCandle()
 {
    // Obter o horário atual em NY
    datetime currentTime = TimeCurrent();
@@ -159,29 +166,33 @@ void DetectCISDInSecondSwingCandle()
 
    int totalBars = Bars(NULL, PERIOD_H1);  // Total de barras no gráfico de 1H
 
-   // Percorrer as velas de 1H para verificar as segundas velas do swing
+   // Percorrer as velas de 1H para verificar as segundas e terceiras velas do swing
    for (int i = 2; i < totalBars - 2; i++)  // Verificar barras anteriores e seguintes
    {
       double high2 = iHigh(NULL, PERIOD_H1, i);  // Segunda vela (no meio do swing)
       double low2 = iLow(NULL, PERIOD_H1, i);    // Segunda vela (no meio do swing)
+      double high3 = iHigh(NULL, PERIOD_H1, i-1);  // Terceira vela
+      double low3 = iLow(NULL, PERIOD_H1, i-1);    // Terceira vela
 
-      // Verificar se essa vela faz parte de um swing high ou low
+      // Verificar se essas velas fazem parte de um swing high ou low
       bool isSwingHigh = (high2 > iHigh(NULL, PERIOD_H1, i+1) && high2 > iHigh(NULL, PERIOD_H1, i-1));
       bool isSwingLow = (low2 < iLow(NULL, PERIOD_H1, i+1) && low2 < iLow(NULL, PERIOD_H1, i-1));
 
       if (isSwingHigh || isSwingLow)
       {
-         // Buscar CISD dentro dessa segunda vela de swing
-         datetime timeStart = iTime(NULL, PERIOD_H1, i);        // Início da segunda vela de 1 hora
-         datetime timeEnd = timeStart + 3600;                   // Fim da vela de 1 hora
+         // Buscar CISD dentro da segunda e terceira vela de swing
+         datetime timeStart2 = iTime(NULL, PERIOD_H1, i);        // Início da segunda vela de 1 hora
+         datetime timeEnd2 = timeStart2 + 3600;                 // Fim da segunda vela de 1 hora
+         datetime timeStart3 = iTime(NULL, PERIOD_H1, i-1);      // Início da terceira vela de 1 hora
+         datetime timeEnd3 = timeStart3 + 3600;                 // Fim da terceira vela de 1 hora
 
-         // Agora buscar velas de 5 minutos dentro do intervalo dessa segunda vela de swing
+         // Agora buscar velas de 5 minutos dentro dos intervalos da segunda e terceira velas de swing
          for (int j = 0; j < Bars(NULL, PERIOD_M5); j++)
          {
             datetime timeM5 = iTime(NULL, PERIOD_M5, j);
 
-            // Verificar se a vela M5 está dentro da segunda vela do swing de 1H
-            if (timeM5 >= timeStart && timeM5 < timeEnd)
+            // Verificar se a vela M5 está dentro da segunda ou terceira vela do swing de 1H
+            if ((timeM5 >= timeStart2 && timeM5 < timeEnd2) || (timeM5 >= timeStart3 && timeM5 < timeEnd3))
             {
                datetime timeNY = ConvertToNYTime(timeM5);  // Converter o horário da vela para NY time
 
@@ -197,7 +208,7 @@ void DetectCISDInSecondSwingCandle()
                   if ((highM5 > highM5_prev && highM5 > iHigh(NULL, PERIOD_M5, j-1)) || 
                       (lowM5 < lowM5_prev && lowM5 < iLow(NULL, PERIOD_M5, j-1)))
                   {
-                     Print("CISD detectado dentro da segunda vela de swing em M5 com índice ", j);
+                     Print("CISD detectado dentro da segunda ou terceira vela de swing em M5 com índice ", j);
                      // Aqui, podemos armazenar ou usar essa detecção para outras ações no EA
                   }
                }
@@ -208,24 +219,57 @@ void DetectCISDInSecondSwingCandle()
 }
 
 //+------------------------------------------------------------------+
+//| Função para detectar pivôs e CISD em M5 com base em pivôs        |
+//+------------------------------------------------------------------+
+void DetectCISDInM5UsingPivots(int length, int minSequence, int maxSequence)
+{
+   int totalBars = Bars(NULL, PERIOD_M5);
+
+   // Percorrer as velas de M5
+   for (int i = 2; i < totalBars - 2; i++) 
+   {
+      double high1 = iHigh(NULL, PERIOD_M5, i+1);
+      double high2 = iHigh(NULL, PERIOD_M5, i);
+      double high3 = iHigh(NULL, PERIOD_M5, i-1);
+
+      double low1 = iLow(NULL, PERIOD_M5, i+1);
+      double low2 = iLow(NULL, PERIOD_M5, i);
+      double low3 = iLow(NULL, PERIOD_M5, i-1);
+
+      // Detectar pivôs altos e baixos
+      if (high2 > high1 && high2 > high3) ph = high2;
+      if (low2 < low1 && low2 < low3) pl = low2;
+
+      // Verificar Bearish CISD (transição de alta para baixa)
+      if (cisTrend == 1 && iClose(NULL, PERIOD_M5, i) < pl && i - cisTrend <= maxSequence && i - cisTrend >= minCISDDuration)
+      {
+         cisTrend = -1;  // Definir como tendência de baixa
+         Print("Bearish CISD detectado em M5 na vela ", i);
+      }
+
+      // Verificar Bullish CISD (transição de baixa para alta)
+      if (cisTrend == -1 && iClose(NULL, PERIOD_M5, i) > ph && i - cisTrend <= maxSequence && i - cisTrend >= minCISDDuration)
+      {
+         cisTrend = 1;  // Definir como tendência de alta
+         Print("Bullish CISD detectado em M5 na vela ", i);
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
 //| Expert tick function                                             |
 //+------------------------------------------------------------------+
 void OnTick()
 {
-   // Obtenha o horário da última vela de 5 minutos
-   datetime currentM5CandleTime = iTime(NULL, PERIOD_M5, 0);
+   // Parâmetros para CISD
+   int length = 10;  // Tamanho do swing
+   int maxSequence = 100;  // Duração máxima
 
-   // Verifique se é uma nova vela de 5 minutos
-   if (currentM5CandleTime != lastM5CandleTime)
-   {
-      lastM5CandleTime = currentM5CandleTime;  // Atualizar o tempo da última vela
+   // Detectar CISD com base nos pivôs, usando minCISDDuration definido pelo usuário
+   DetectCISDInM5UsingPivots(length, minCISDDuration, maxSequence);
 
-      // Executar detecção de CISD apenas quando uma nova vela de M5 é formada
-      DetectCISDInSecondSwingCandle();
-   }
-
-   // Outras funções...
-   IdentifyAndPaintSwingCandles();
+   // Detectar CISD na segunda e terceira vela de swing
+   DetectCISDInSecondOrThirdSwingCandle();
 }
 
 //+------------------------------------------------------------------+
