@@ -1,0 +1,250 @@
+// Variável para armazenar o tempo da última vela de 5 minutos
+datetime lastM5CandleTime = 0;  
+
+// Variável global para controlar se os desenhos estão habilitados ou desabilitados
+input bool EnableDrawings = false;  // Desativado por padrão
+
+datetime lastTradeDay;  // Variável global para armazenar o último dia de trading
+
+//+------------------------------------------------------------------+
+//| Expert initialization function                                   |
+//+------------------------------------------------------------------+
+int OnInit()
+{
+   // Inicializar o último dia de trading com a data atual
+   lastTradeDay = iTime(NULL, PERIOD_D1, 0);  // O tempo de início do último candle diário
+   return(INIT_SUCCEEDED);
+}
+
+//+------------------------------------------------------------------+
+//| Função para converter o horário do servidor para o horário de Nova York |
+//+------------------------------------------------------------------+
+datetime ConvertToNYTime(datetime serverTime)
+{
+   // Assumindo que o servidor está em UTC e que Nova York está no UTC-5 (ajustável conforme o horário de verão)
+   int nyTimeOffset = -5 * 3600;  // Fuso horário de Nova York (UTC-5)
+   return serverTime + nyTimeOffset;
+}
+
+//+------------------------------------------------------------------+
+//| Função para verificar se o tempo atual está dentro das sessões de Londres ou NY AM |
+//+------------------------------------------------------------------+
+bool IsInTradingSession(datetime timeNY)
+{
+   // Sessão de Londres: 2:00 AM - 5:00 AM NY Local Time
+   int londonStart = 2 * 3600;
+   int londonEnd = 5 * 3600;
+
+   // Sessão de Nova York AM: 7:00 AM - 11:00 AM NY Local Time
+   int nyStart = 7 * 3600;
+   int nyEnd = 11 * 3600;
+
+   // Converter o tempo para estrutura de tempo
+   MqlDateTime dateTime;
+   TimeToStruct(timeNY, dateTime);
+
+   // Obter a hora do dia com base no tempo fornecido
+   int hourOfDay = (dateTime.hour * 3600) + (dateTime.min * 60);  // Hora do dia em segundos
+
+   // Verificar se o tempo atual está dentro de uma das sessões
+   if ((hourOfDay >= londonStart && hourOfDay <= londonEnd) || (hourOfDay >= nyStart && hourOfDay <= nyEnd))
+   {
+      return true;
+   }
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| Função para identificar swings highs e lows e criar objetos gráficos para o dia atual |
+//+------------------------------------------------------------------+
+void IdentifyAndPaintSwingCandles()
+{
+   int totalBars = Bars(NULL, PERIOD_H1);  // Total de barras no gráfico de 1H
+   double minDistancePips = 100;  // Distância mínima para um swing
+
+   // Percorrer as últimas velas e detectar swings
+   for (int i = 2; i < totalBars - 2; i++)  // Verificar barras anteriores e seguintes
+   {
+      datetime candleTime = iTime(NULL, PERIOD_H1, i);
+      datetime currentDayStart = iTime(NULL, PERIOD_D1, 0);
+
+      // Verificar se a vela pertence ao dia de trading atual
+      if (candleTime < currentDayStart)
+         continue;  // Ignorar velas de dias anteriores
+
+      double high1 = iHigh(NULL, PERIOD_H1, i+1);
+      double high2 = iHigh(NULL, PERIOD_H1, i);  // Segunda vela (no meio do swing)
+      double high3 = iHigh(NULL, PERIOD_H1, i-1);
+
+      double low1 = iLow(NULL, PERIOD_H1, i+1);
+      double low2 = iLow(NULL, PERIOD_H1, i);    // Segunda vela (no meio do swing)
+      double low3 = iLow(NULL, PERIOD_H1, i-1);
+
+      // Verificar Swing High
+      if (high2 > high1 && high2 > high3 && (high2 - low3) >= minDistancePips * Point())
+      {
+         Print("Swing High detectado na vela de índice ", i);
+         PaintSwingCandles(i, clrRed);  // Pintar três velas do swing high
+      }
+
+      // Verificar Swing Low
+      if (low2 < low1 && low2 < low3 && (high1 - low2) >= minDistancePips * Point())
+      {
+         Print("Swing Low detectado na vela de índice ", i);
+         PaintSwingCandles(i, clrBlue);  // Pintar três velas do swing low
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Função para pintar as velas dos swings com retângulos gráficos para o dia atual |
+//+------------------------------------------------------------------+
+void PaintSwingCandles(int index, color swingColor)
+{
+   // Verificar se os desenhos estão habilitados
+   if (!EnableDrawings) return;  // Se desativado, sair da função
+
+   string dayString = TimeToString(lastTradeDay, TIME_DATE);
+
+   // Criar objetos gráficos para cobrir as três velas que formam o swing
+   for (int i = 0; i < 3; i++)  // Pintar três velas consecutivas
+   {
+      int barIndex = index - i;
+      string obj_name = "swing_candle_" + dayString + "_" + IntegerToString(barIndex);
+
+      // Verificar se o objeto já foi criado para essa vela
+      if (ObjectFind(0, obj_name) == -1)
+      {
+         // Coletar dados da vela para desenhar o objeto retangular
+         datetime timeOpen = iTime(NULL, PERIOD_H1, barIndex);      // Tempo de abertura da vela
+         datetime timeClose = timeOpen + 3600;                      // Fechamento ajustado (uma hora)
+         double high1 = iHigh(NULL, PERIOD_H1, barIndex);           // Máxima da vela
+         double low1 = iLow(NULL, PERIOD_H1, barIndex);             // Mínima da vela
+         double open1 = iOpen(NULL, PERIOD_H1, barIndex);           // Preço de abertura
+         double close1 = iClose(NULL, PERIOD_H1, barIndex);         // Preço de fechamento
+
+         // Definir o corpo da vela entre a abertura e o fechamento (retângulo)
+         double topBody = MathMax(open1, close1);  // O maior entre abertura e fechamento
+         double bottomBody = MathMin(open1, close1);  // O menor entre abertura e fechamento
+
+         // Criar o retângulo preenchido para cobrir o corpo da vela
+         bool created = ObjectCreate(0, obj_name + "_body", OBJ_RECTANGLE, 0, timeOpen, topBody, timeClose, bottomBody);
+         if (created)
+         {
+            ObjectSetInteger(0, obj_name + "_body", OBJPROP_COLOR, swingColor);
+            ObjectSetInteger(0, obj_name + "_body", OBJPROP_STYLE, STYLE_SOLID);
+            ObjectSetInteger(0, obj_name + "_body", OBJPROP_WIDTH, 2);  // Tornar a borda mais visível
+            ObjectSetInteger(0, obj_name + "_body", OBJPROP_BACK, false);  // Colocar à frente do gráfico
+            ObjectSetInteger(0, obj_name + "_body", OBJPROP_FILL, true);   // Preencher o retângulo
+            ObjectSetInteger(0, obj_name + "_body", OBJPROP_ZORDER, 1);    // Ordem de exibição mais alta
+         }
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Função para detectar CISD na segunda vela do swing de 1 hora em M5 |
+//+------------------------------------------------------------------+
+void DetectCISDInSecondSwingCandle()
+{
+   // Obter o horário atual em NY
+   datetime currentTime = TimeCurrent();
+   datetime currentTimeNY = ConvertToNYTime(currentTime);
+
+   // Verificar se estamos dentro das Kill Zones antes de prosseguir
+   if (!IsInTradingSession(currentTimeNY)) {
+      Print("Fora do horário das Kill Zones, detecção de CISD ignorada.");
+      return;  // Se não estiver nas Kill Zones, não processar
+   }
+
+   int totalBars = Bars(NULL, PERIOD_H1);  // Total de barras no gráfico de 1H
+
+   // Percorrer as velas de 1H para verificar as segundas velas do swing
+   for (int i = 2; i < totalBars - 2; i++)  // Verificar barras anteriores e seguintes
+   {
+      double high2 = iHigh(NULL, PERIOD_H1, i);  // Segunda vela (no meio do swing)
+      double low2 = iLow(NULL, PERIOD_H1, i);    // Segunda vela (no meio do swing)
+
+      // Verificar se essa vela faz parte de um swing high ou low
+      bool isSwingHigh = (high2 > iHigh(NULL, PERIOD_H1, i+1) && high2 > iHigh(NULL, PERIOD_H1, i-1));
+      bool isSwingLow = (low2 < iLow(NULL, PERIOD_H1, i+1) && low2 < iLow(NULL, PERIOD_H1, i-1));
+
+      if (isSwingHigh || isSwingLow)
+      {
+         // Buscar CISD dentro dessa segunda vela de swing
+         datetime timeStart = iTime(NULL, PERIOD_H1, i);        // Início da segunda vela de 1 hora
+         datetime timeEnd = timeStart + 3600;                   // Fim da vela de 1 hora
+
+         // Agora buscar velas de 5 minutos dentro do intervalo dessa segunda vela de swing
+         for (int j = 0; j < Bars(NULL, PERIOD_M5); j++)
+         {
+            datetime timeM5 = iTime(NULL, PERIOD_M5, j);
+
+            // Verificar se a vela M5 está dentro da segunda vela do swing de 1H
+            if (timeM5 >= timeStart && timeM5 < timeEnd)
+            {
+               datetime timeNY = ConvertToNYTime(timeM5);  // Converter o horário da vela para NY time
+
+               // Verificar se estamos nas sessões de Londres ou NY AM
+               if (IsInTradingSession(timeNY))
+               {
+                  double highM5 = iHigh(NULL, PERIOD_M5, j);
+                  double lowM5 = iLow(NULL, PERIOD_M5, j);
+                  double highM5_prev = iHigh(NULL, PERIOD_M5, j+1);
+                  double lowM5_prev = iLow(NULL, PERIOD_M5, j+1);
+
+                  // Detectar CISD na vela de M5
+                  if ((highM5 > highM5_prev && highM5 > iHigh(NULL, PERIOD_M5, j-1)) || 
+                      (lowM5 < lowM5_prev && lowM5 < iLow(NULL, PERIOD_M5, j-1)))
+                  {
+                     Print("CISD detectado dentro da segunda vela de swing em M5 com índice ", j);
+                     // Aqui, podemos armazenar ou usar essa detecção para outras ações no EA
+                  }
+               }
+            }
+         }
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Expert tick function                                             |
+//+------------------------------------------------------------------+
+void OnTick()
+{
+   // Obtenha o horário da última vela de 5 minutos
+   datetime currentM5CandleTime = iTime(NULL, PERIOD_M5, 0);
+
+   // Verifique se é uma nova vela de 5 minutos
+   if (currentM5CandleTime != lastM5CandleTime)
+   {
+      lastM5CandleTime = currentM5CandleTime;  // Atualizar o tempo da última vela
+
+      // Executar detecção de CISD apenas quando uma nova vela de M5 é formada
+      DetectCISDInSecondSwingCandle();
+   }
+
+   // Outras funções...
+   IdentifyAndPaintSwingCandles();
+}
+
+//+------------------------------------------------------------------+
+//| Função para remover objetos antigos do dia anterior              |
+//+------------------------------------------------------------------+
+void RemoveObjectsFromPreviousDay(datetime day)
+{
+   string dayString = TimeToString(day, TIME_DATE);  // Converter a data do dia anterior para string
+   int totalObjects = ObjectsTotal(0);  // Contagem total de objetos no gráfico
+
+   // Percorrer todos os objetos e remover aqueles associados ao dia anterior
+   for (int i = totalObjects - 1; i >= 0; i--)
+   {
+      string obj_name = ObjectName(0, i);
+      if (StringFind(obj_name, dayString) != -1)
+      {
+         // Remover o objeto associado ao dia anterior
+         ObjectDelete(0, obj_name);
+         Print("Objeto removido: ", obj_name);
+      }
+   }
+}
